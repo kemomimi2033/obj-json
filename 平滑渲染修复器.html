@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>平滑渲染修复器 · Minecraft Geometry</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    line-height: 1.7; color: #333; background: #f5f7fa; padding: 16px;
+  }
+  .container { width: 100%; max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 24px; color: #1a1a2e; padding-bottom: 12px; margin-bottom: 6px; border-bottom: 3px solid #4361ee; }
+  .subtitle { color: #636e72; font-size: 14px; margin-bottom: 18px; }
+  h2 { font-size: 18px; color: #4361ee; margin-bottom: 12px; padding-left: 10px; border-left: 4px solid #4361ee; }
+  h3 { font-size: 15px; color: #2d3436; margin: 14px 0 8px; }
+  p { margin-bottom: 8px; }
+  code, .inline-code {
+    font-family: "JetBrains Mono", "Consolas", monospace;
+    background: #eef0f5; color: #d63384; padding: 1px 6px; border-radius: 4px; font-size: 13px;
+  }
+  .card {
+    background: #fff; border: 1px solid #e4e7f0; border-radius: 12px;
+    padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 14px rgba(0,0,0,0.05);
+  }
+  .tip { background: #e8f4fd; border-left: 4px solid #0984e3; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 12px 0; font-size: 14px; }
+  .tip strong { color: #0984e3; }
+  .warning { background: #fff3e0; border-left: 4px solid #e17055; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 12px 0; font-size: 14px; }
+  .warning strong { color: #e17055; }
+
+  .drop {
+    border: 2px dashed #b9c4e6; border-radius: 12px; background: #f8f9ff;
+    padding: 34px 20px; text-align: center; cursor: pointer; transition: all .18s; user-select: none;
+  }
+  .drop:hover, .drop.over { border-color: #4361ee; background: #eef2ff; }
+  .drop .big { font-size: 34px; }
+  .drop .t1 { font-weight: 700; color: #2d3436; margin-top: 6px; }
+  .drop .t2 { color: #6c647c; font-size: 13px; }
+  input[type=file] { display: none; }
+
+  .check {
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 11px 14px; border: 1px solid #e4e7f0; border-radius: 8px; background: #f8f9ff; margin-bottom: 10px;
+  }
+  .check input { margin-top: 4px; flex-shrink: 0; width: 16px; height: 16px; }
+  .check strong { font-size: 14px; }
+  .check .hint { color: #6c647c; font-size: 12.5px; display: block; }
+
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  button {
+    border: 0; border-radius: 8px; padding: 11px 18px; font-weight: 700; font-size: 14px;
+    cursor: pointer; transition: transform .12s, opacity .12s;
+  }
+  button:hover:not(:disabled) { transform: translateY(-1px); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .primary { background: #4361ee; color: #fff; box-shadow: 0 4px 14px rgba(67,97,238,.25); }
+  .secondary { background: #fff; color: #4361ee; border: 1px solid rgba(67,97,238,.35); }
+  .danger { background: #fff; color: #c93c37; border: 1px solid rgba(201,60,55,.35); }
+  .ghost { background: #eef0f5; color: #444; }
+
+  .file-item {
+    border: 1px solid #e4e7f0; border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; background: #fdfdfe;
+  }
+  .file-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .file-name { font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+  .badge.ok { background: #e8f5e9; color: #18794e; }
+  .badge.warn { background: #fff3e0; color: #9a6700; }
+  .badge.err { background: #fde8e5; color: #c93c37; }
+  .badge.gray { background: #eef0f5; color: #6c647c; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0; }
+  .stat { border: 1px solid #e4e7f0; border-radius: 8px; background: #f8f9ff; padding: 8px 10px; }
+  .stat span { display: block; color: #6c647c; font-size: 11px; font-weight: 700; }
+  .stat strong { display: block; font-size: 16px; color: #4361ee; }
+
+  .output-wrap { max-height: 340px; overflow: auto; border-radius: 8px; border: 1px solid #dee2e6; background: #1e1e2e; margin-top: 10px; }
+  pre {
+    background: #1e1e2e; color: #cdd6f4; padding: 14px; margin: 0; font-size: 12px; line-height: 1.55;
+    font-family: "JetBrains Mono", "Consolas", monospace; white-space: pre-wrap; word-break: break-all; overflow-wrap: anywhere;
+  }
+  .muted { color: #6c647c; font-size: 13px; }
+  ul.plist { padding-left: 20px; font-size: 14px; }
+  ul.plist li { margin-bottom: 4px; }
+  @media (max-width: 620px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    h1 { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>平滑渲染修复器</h1>
+  <p class="subtitle">把「被平滑着色」的 Minecraft Bedrock 几何模型（poly_mesh）修回平面着色，<strong>不改变结构、大小、骨骼分组</strong>，只修复法线。</p>
+
+  <div class="card">
+    <div class="drop" id="drop">
+      <div class="big">📂</div>
+      <div class="t1">点击选择，或把模型 JSON 拖到这里</div>
+      <div class="t2">支持 .json / geometry 文件，可多选 · 全部在本地处理，不上传</div>
+    </div>
+    <input id="fileInput" type="file" accept=".json,application/json,text/plain" multiple>
+
+    <div class="actions">
+      <button class="primary" id="fixBtn" disabled>开始修复</button>
+      <button class="secondary" id="copyBtn" disabled>复制 JSON</button>
+      <button class="ghost" id="clearBtn">清空</button>
+    </div>
+
+    <h3>选项</h3>
+    <label class="check">
+      <input id="dedupe" type="checkbox" checked>
+      <span><strong>合并重复法线</strong><span class="hint">相同方向的法线只保留一份，缩小文件体积（推荐开启）。</span></span>
+    </label>
+    <label class="check">
+      <input id="flip" type="checkbox">
+      <span><strong>反转法线方向</strong><span class="hint">只有在修复后出现「部件发黑 / 内外面反了」时才勾选。默认关闭。</span></span>
+    </label>
+  </div>
+
+  <div id="results"></div>
+
+  <div class="card">
+    <h2>它做了什么？</h2>
+    <p>Blockbench 导出网格时，如果模型带「平滑着色」，会把同一顶点周围所有面的法线<strong>平均</strong>成一个「顶点法线」，并让每个面角引用它。渲染器在面内插值这些不同方向的法线，就出现了圆润的平滑感。</p>
+    <p>本工具的做法是：<strong>逐面重新计算唯一的面法线</strong>（用法向量的叉乘 + 归一化），让一个面的四个角全部引用同一条法线，从而恢复平面着色。</p>
+    <ul class="plist">
+      <li><code>positions</code>、<code>uvs</code> 完全不动；</li>
+      <li><code>polys</code> 只改中间那个「法线索引」，顶点索引和 UV 索引原样保留；</li>
+      <li>骨骼层级、名称、<code>pivot</code>、纹理尺寸、标识符等全部原样保留；</li>
+      <li>非网格（普通方块 <code>cubes</code>）的骨骼不触碰。</li>
+    </ul>
+    <div class="tip"><strong>💡 小提示：</strong>修复后的法线方向会重新按面的朝向来计算，所以就算原模型的法线方向本身有偏差（例如 X 轴镜像导致的错乱），也会一并纠正。</div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  var drop = document.getElementById('drop');
+  var fileInput = document.getElementById('fileInput');
+  var fixBtn = document.getElementById('fixBtn');
+  var copyBtn = document.getElementById('copyBtn');
+  var clearBtn = document.getElementById('clearBtn');
+  var dedupeInput = document.getElementById('dedupe');
+  var flipInput = document.getElementById('flip');
+  var resultsEl = document.getElementById('results');
+
+  var entries = [];   // { id, name, status, message, original, fixed, stats, previewLimit }
+  var idCounter = 0;
+  var lastJson = '';
+
+  // ---------- 工具函数 ----------
+  function round5(x) {
+    var r = Math.round(x * 1e5) / 1e5;
+    return r === 0 ? 0 : r;
+  }
+  function num(v) { return Number.isFinite(v) ? String(v) : '0'; }
+
+  // 递归格式化 JSON：数字数组一行；长度<=4 的「向量数组」（如单个面）一行；其余换行。
+  function fmt(value, indent) {
+    var pad = '  '.repeat(indent);
+    var child = '  '.repeat(indent + 1);
+    if (Array.isArray(value)) {
+      if (value.length === 0) return '[]';
+      if (value.every(function (v) { return typeof v === 'number'; })) {
+        return '[' + value.map(num).join(', ') + ']';
+      }
+      var allVec = value.every(function (v) {
+        return Array.isArray(v) && v.every(function (x) { return typeof x === 'number'; });
+      });
+      if (allVec && value.length <= 4) {
+        return '[' + value.map(function (v) { return '[' + v.map(num).join(', ') + ']'; }).join(', ') + ']';
+      }
+      var rows = value.map(function (v) { return child + fmt(v, indent + 1); });
+      return '[\n' + rows.join(',\n') + '\n' + pad + ']';
+    }
+    if (value && typeof value === 'object') {
+      var keys = Object.keys(value);
+      if (keys.length === 0) return '{}';
+      var lines = keys.map(function (k) {
+        return child + JSON.stringify(k) + ': ' + fmt(value[k], indent + 1);
+      });
+      return '{\n' + lines.join(',\n') + '\n' + pad + '}';
+    }
+    if (typeof value === 'string') return JSON.stringify(value);
+    if (typeof value === 'boolean') return value ? 'true' : 'false';
+    if (value === null) return 'null';
+    return num(value);
+  }
+
+  // ---------- 核心：修复单个几何对象 ----------
+  function fixGeometryObject(obj, flip, dedupe) {
+    var stats = { meshes: 0, polys: 0, smoothPolys: 0, normalsBefore: 0, normalsAfter: 0, fixedPolys: 0 };
+    var geometries = obj && obj['minecraft:geometry'];
+    if (!Array.isArray(geometries)) return stats;
+
+    for (var gi = 0; gi < geometries.length; gi++) {
+      var geom = geometries[gi];
+      if (!geom || !Array.isArray(geom.bones)) continue;
+      for (var bi = 0; bi < geom.bones.length; bi++) {
+        var bone = geom.bones[bi];
+        var mesh = bone && bone.poly_mesh;
+        if (!mesh || !Array.isArray(mesh.positions) || !Array.isArray(mesh.polys)) continue;
+        var positions = mesh.positions;
+        var polys = mesh.polys;
+        var oldNormals = Array.isArray(mesh.normals) ? mesh.normals : [];
+        stats.meshes++;
+        stats.normalsBefore += oldNormals.length;
+
+        var newNormals = [];
+        var map = {};
+        for (var pi = 0; pi < polys.length; pi++) {
+          var poly = polys[pi];
+          if (!Array.isArray(poly) || poly.length < 3) continue;
+          stats.polys++;
+
+          // 检测是否为平滑：同一面内法线索引是否不一致
+          var seen = {};
+          var distinct = 0;
+          for (var t = 0; t < poly.length; t++) {
+            var ni = poly[t][1];
+            if (!(ni in seen)) { seen[ni] = 1; distinct++; }
+          }
+          if (distinct > 1) stats.smoothPolys++;
+
+          // 找一组非退化的三个顶点计算面法线
+          var normal = null;
+          for (var i = 0; i < poly.length && !normal; i++) {
+            for (var j = i + 1; j < poly.length && !normal; j++) {
+              for (var k = j + 1; k < poly.length && !normal; k++) {
+                var a = positions[poly[i][0]];
+                var b = positions[poly[j][0]];
+                var c = positions[poly[k][0]];
+                if (!a || !b || !c) continue;
+                // normal = normalize(cross(c-a, b-a))
+                var ux = c[0] - a[0], uy = c[1] - a[1], uz = c[2] - a[2];
+                var vx = b[0] - a[0], vy = b[1] - a[1], vz = b[2] - a[2];
+                var cx = uy * vz - uz * vy;
+                var cy = uz * vx - ux * vz;
+                var cz = ux * vy - uy * vx;
+                var len = Math.sqrt(cx * cx + cy * cy + cz * cz);
+                if (len > 1e-9) normal = [cx / len, cy / len, cz / len];
+              }
+            }
+          }
+          if (!normal) normal = [0, 1, 0];   // 退化面兜底
+          if (flip) normal = [-normal[0], -normal[1], -normal[2]];
+
+          var r = [round5(normal[0]), round5(normal[1]), round5(normal[2])];
+          var idx;
+          if (dedupe) {
+            var key = r[0] + ',' + r[1] + ',' + r[2];
+            if (key in map) idx = map[key];
+            else { idx = newNormals.length; newNormals.push(r); map[key] = idx; }
+          } else {
+            idx = newNormals.length;
+            newNormals.push(r);
+          }
+
+          for (var v = 0; v < poly.length; v++) poly[v][1] = idx;
+          stats.fixedPolys++;
+        }
+
+        mesh.normals = newNormals;
+        stats.normalsAfter += newNormals.length;
+      }
+    }
+    return stats;
+  }
+
+  // ---------- 渲染 ----------
+  function render() {
+    if (entries.length === 0) {
+      resultsEl.innerHTML = '';
+      copyBtn.disabled = true;
+      fixBtn.disabled = true;
+      return;
+    }
+    fixBtn.disabled = !entries.some(function (e) { return e.status === 'pending' || e.status === 'error'; });
+
+    var html = '';
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      var badge;
+      if (e.status === 'done') {
+        badge = e.stats.smoothPolys > 0
+          ? '<span class="badge ok">✅ 已修复</span>'
+          : '<span class="badge gray">✔ 已是平面着色</span>';
+      } else if (e.status === 'error') {
+        badge = '<span class="badge err">❌ 失败</span>';
+      } else {
+        badge = '<span class="badge gray">待修复</span>';
+      }
+
+      html += '<div class="card"><div class="file-item">';
+      html += '<div class="file-head"><span class="file-name" title="' + escapeAttr(e.name) + '">📄 ' + escapeHtml(e.name) + '</span>' + badge + '</div>';
+
+      if (e.status === 'error') {
+        html += '<p class="warning" style="margin-top:10px;">' + escapeHtml(e.message || '解析失败') + '</p>';
+      } else if (e.status === 'done') {
+        var s = e.stats;
+        html += '<div class="stats">'
+          + statBox('网格骨骼', s.meshes)
+          + statBox('面总数', s.polys)
+          + statBox('平滑面（原）', s.smoothPolys)
+          + statBox('法线数 原→新', s.normalsBefore + '→' + s.normalsAfter)
+          + '</div>';
+        if (s.polys === 0) {
+          html += '<p class="muted">该文件没有 <code>poly_mesh</code> 网格（可能是普通方块模型），无需修复。</p>';
+        } else if (s.smoothPolys === 0) {
+          html += '<p class="muted">检测到所有面已经是平面着色，已按统一规则重算（结果一致）。</p>';
+        } else {
+          html += '<p class="muted">共 <strong>' + s.smoothPolys + '</strong> 个平滑面已改为平面着色。</p>';
+        }
+        html += '<div class="actions">'
+          + '<button class="primary" data-download="' + e.id + '">⬇️ 下载修复后的 JSON</button>'
+          + '<button class="secondary" data-preview="' + e.id + '">预览</button>'
+          + '</div>';
+        if (e.previewOpen) {
+          html += '<div class="output-wrap"><pre>' + escapeHtml(e.fixed.slice(0, 200000)) + (e.fixed.length > 200000 ? '\n\n... 预览已截断，完整文件 ' + e.fixed.length.toLocaleString() + ' 字符' : '') + '</pre></div>';
+        }
+      }
+      html += '</div></div>';
+    }
+    resultsEl.innerHTML = html;
+    copyBtn.disabled = !entries.some(function (e) { return e.status === 'done'; });
+  }
+
+  function statBox(label, val) {
+    return '<div class="stat"><span>' + label + '</span><strong>' + val + '</strong></div>';
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function escapeAttr(s) { return escapeHtml(s); }
+
+  // ---------- 交互 ----------
+  function addFiles(files) {
+    var list = Array.prototype.slice.call(files);
+    if (!list.length) return;
+    list.forEach(function (file) {
+      entries.push({
+        id: ++idCounter, name: file.name, file: file,
+        status: 'pending', message: '', original: null, fixed: '', stats: null, previewOpen: false
+      });
+    });
+    render();
+  }
+
+  drop.addEventListener('click', function () { fileInput.click(); });
+  fileInput.addEventListener('change', function () { addFiles(fileInput.files); fileInput.value = ''; });
+  ['dragover', 'dragenter'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); });
+  });
+  drop.addEventListener('drop', function (e) {
+    if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files);
+  });
+
+  clearBtn.addEventListener('click', function () {
+    entries = []; lastJson = ''; render();
+  });
+
+  copyBtn.addEventListener('click', function () {
+    var done = entries.filter(function (e) { return e.status === 'done'; });
+    if (!done.length) return;
+    var txt = done.length === 1 ? done[0].fixed
+      : done.map(function (e) { return '/* ' + e.name + ' */\n' + e.fixed; }).join('\n\n');
+    navigator.clipboard.writeText(txt).then(function () {
+      var old = copyBtn.textContent;
+      copyBtn.textContent = '✅ 已复制';
+      setTimeout(function () { copyBtn.textContent = old; }, 1400);
+    }).catch(function () { alert('复制失败，请使用下载按钮。'); });
+  });
+
+  resultsEl.addEventListener('click', function (e) {
+    var dl = e.target.closest('[data-download]');
+    if (dl) {
+      var id = parseInt(dl.getAttribute('data-download'), 10);
+      var entry = entries.find(function (x) { return x.id === id; });
+      if (entry) downloadText(entry.name, entry.fixed);
+      return;
+    }
+    var pv = e.target.closest('[data-preview]');
+    if (pv) {
+      var id2 = parseInt(pv.getAttribute('data-preview'), 10);
+      var entry2 = entries.find(function (x) { return x.id === id2; });
+      if (entry2) { entry2.previewOpen = !entry2.previewOpen; render(); }
+    }
+  });
+
+  function downloadText(name, text) {
+    var blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
+  fixBtn.addEventListener('click', function () {
+    var flip = flipInput.checked;
+    var dedupe = dedupeInput.checked;
+    var pending = entries.filter(function (e) { return e.status === 'pending' || e.status === 'error'; });
+    if (!pending.length) return;
+
+    var job = function (i) {
+      if (i >= pending.length) { render(); return; }
+      var entry = pending[i];
+      var reader = new FileReader();
+      reader.onload = function () {
+        try {
+          var text = String(reader.result);
+          var obj = JSON.parse(text);
+          if (!obj || typeof obj !== 'object') throw new Error('不是有效的 JSON 对象。');
+          if (!obj['minecraft:geometry']) throw new Error('没有找到 "minecraft:geometry" 字段，这不是几何模型文件。');
+          var stats = fixGeometryObject(obj, flip, dedupe);
+          entry.original = text;
+          entry.stats = stats;
+          entry.fixed = fmt(obj, 0);
+          entry.status = 'done';
+          lastJson = entry.fixed;
+        } catch (err) {
+          entry.status = 'error';
+          entry.message = err && err.message ? err.message : String(err);
+        }
+        render();
+        setTimeout(function () { job(i + 1); }, 0);
+      };
+      reader.onerror = function () {
+        entry.status = 'error';
+        entry.message = '读取文件失败。';
+        render();
+        setTimeout(function () { job(i + 1); }, 0);
+      };
+      reader.readAsText(entry.file);
+    };
+    job(0);
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
